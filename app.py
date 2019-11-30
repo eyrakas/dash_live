@@ -2,137 +2,231 @@ import dash
 import dash_core_components as dcc
 import dash_html_components as html
 from dash.dependencies import Input, Output
+import pandas as pd
 import altair as alt
-import vega_datasets
+import json
+import geopandas as gpd
+import os
+import dash_bootstrap_components as dbc
+
+import os
+os.chdir('/Users/sakiga/Desktop/MDS_Block3/LABS_532/Milestone1/DSCI_532_Group213_death_by_risk_factors/app/')
+
+external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
+
+app = dash.Dash(__name__, external_stylesheets=external_stylesheets)
+factors_data = pd.read_csv('../data/clean_data_line_plot.csv')
+
 app = dash.Dash(__name__, assets_folder='assets')
 server = app.server
+
 app.title = 'Dash app with pure Altair HTML'
-## Magic happens here
-def make_plot(x_axis='Displacement',
-              y_axis='Cylinders'):
-    # Create a plot of the Displacement and the Horsepower of the cars dataset
-    # Add theme here
-    def mds_special():
-        font = "Arial"
-        axisColor = "#000000"
-        gridColor = "#DEDDDD"
-        return {
-            "config": {
-                "title": {
-                    "fontSize": 24,
-                    "font": font,
-                    "anchor": "start", # equivalent of left-aligned.
-                    "fontColor": "#000000"
-                },
-                'view': {
-                    "height": 300, 
-                    "width": 400
-                },
-                "axisX": {
-                    "domain": True,
-                    #"domainColor": axisColor,
-                    "gridColor": gridColor,
-                    "domainWidth": 1,
-                    "grid": False,
-                    "labelFont": font,
-                    "labelFontSize": 12,
-                    "labelAngle": 0, 
-                    "tickColor": axisColor,
-                    "tickSize": 5, # default, including it just to show you can change it
-                    "titleFont": font,
-                    "titleFontSize": 16,
-                    "titlePadding": 10, # guessing, not specified in styleguide
-                    "title": "X Axis Title (units)", 
-                },
-                "axisY": {
-                    "domain": False,
-                    "grid": True,
-                    "gridColor": gridColor,
-                    "gridWidth": 1,
-                    "labelFont": font,
-                    "labelFontSize": 14,
-                    "labelAngle": 0, 
-                    #"ticks": False, # even if you don't have a "domain" you need to turn these off.
-                    "titleFont": font,
-                    "titleFontSize": 16,
-                    "titlePadding": 10, # guessing, not specified in styleguide
-                    "title": "Y Axis Title (units)", 
-                    # titles are by default vertical left of axis so we need to hack this 
-                    #"titleAngle": 0, # horizontal
-                    #"titleY": -10, # move it up
-                    #"titleX": 18, # move it to the right so it aligns with the labels 
-                },
-            }
-                }
-    # register the custom theme under a chosen name
-    alt.themes.register('mds_special', mds_special)
-    # enable the newly registered theme
-    alt.themes.enable('mds_special')
-    #alt.themes.enable('none') # to return to default
-    chart = alt.Chart(vega_datasets.data.cars.url).mark_circle(size=90).encode(
-                alt.X(x_axis,
-                type='quantitative', 
-                title = x_axis),
-                alt.Y(y_axis, 
-                type='quantitative',
-                title = y_axis),
-                tooltip = ['Horsepower:Q', 'Displacement:Q']
-            ).properties(title='Horsepower vs. Displacement',
-                        width=500, height=350).interactive()
-    return chart
-## Magic ends here
-app.layout = html.Div([
-    ### ADD CONTENT HERE like: html.H1('text'),
-    html.H1('This is my first dashboard'),
-    html.H2('This is a subtitle'),
-    html.H3('Here is an image'),
-    html.Img(src='https://upload.wikimedia.org/wikipedia/commons/thumb/b/b7/Unico_Anello.png/1920px-Unico_Anello.png', 
-            width='10%'),
-    html.H3('Here is our first plot:'),
-    html.Iframe(
-        sandbox='allow-scripts',
-        id='plot',
-        height='470',
-        width='655',
-        style={'border-width': '0'},
-        ################ The magic happens here
-        srcDoc=make_plot().to_html()
-        ################ The magic happens here
-        ),
-        dcc.Dropdown(
-        id='dd-chart',
-        options=[
-            {'label': 'Fuel efficiency', 'value': 'Miles_per_Gallon'},
-            {'label': 'Cylinders', 'value': 'Cylinders'},
-            {'label': 'Engine Displacement', 'value': 'Displacement'}
-        ],
-        value='Displacement',
-        style=dict(width='45%',
-                   verticalAlign="middle")
-        ),
-        dcc.Dropdown(
-        id='dd-chart-y',
-        options=[
-            {'label': 'Fuel efficiency', 'value': 'Miles_per_Gallon'},
-            {'label': 'Cylinders', 'value': 'Cylinders'},
-            {'label': 'Engine Displacement', 'value': 'Displacement'}
-        ],
-        value='Displacement',
-        style=dict(width='45%',
-                   verticalAlign="middle")
-        ),
-])
+
+##wrangling for map
+df = pd.read_csv("../data/clean_number-of-deaths-by-risk-factor.csv")
+
+#source: https://www.naturalearthdata.com/downloads/110m-cultural-vectors/
+#source:https://towardsdatascience.com/a-complete-guide-to-an-interactive-geographical-map-using-python-f4c5197e23e0
+shapefile = '../data/geographic_data/ne_110m_admin_0_countries.shp'
+gdf = gpd.read_file(shapefile)[['ADMIN', 'ADM0_A3', 'geometry']]
+gdf.columns = ['country', 'country_code', 'geometry']
+gdf.head()
+
+df1 = df.query("year == 2017")
+df1.drop(['country'], axis =1 ,inplace = True)
+geo_df = gdf.merge(df1, left_on = 'country_code', right_on = 'code')
+geo_df.drop(['code'], axis =1 ,inplace = True)
+geo_df.iloc[:,4:] = geo_df.iloc[:,4:].div(geo_df.iloc[:,4:].sum(axis=1), axis=0)
+# convert to json file
+choro_json = json.loads(geo_df.to_json())
+choro_data = alt.Data(values=choro_json['features'])
+
+##wrangling ends
+
+#draw_map() function
+# source: https://medium.com/dataexplorations/creating-choropleth-maps-in-altair-eeb7085779a1 
+def draw_map(cols = 'properties.high_blood_pressure', source = choro_data):
+    """
+    Draw heatmap for given quantitative value in world map
+    
+    Parameters:
+    cols -- (string) columns in source
+    source -- (json) data source
+    
+    Examples:
+    draw_map('properties.smoking')
+    
+    """
+    
+    p_map = alt.Chart(source, 
+                      title = "Global death percentage of {} over total death in 2017".format(cols[11:].replace('_',' '))
+                     ).mark_geoshape(
+        fill='lightgray',
+        stroke='black'
+    ).encode(
+        alt.Color(cols, type='quantitative', 
+                  scale=alt.Scale(scheme='yelloworangered'), 
+                  title = "Proportion of death"),
+         tooltip = [alt.Tooltip('properties.country:O', title = 'country'), 
+                    alt.Tooltip('{}:Q'.format(cols), title = '{}'.format(cols[11:].replace('_',' ')), 
+                                format = ".2%")]
+    ).properties(width=800, height=450).configure_title(fontSize=25)
+    return  p_map
+
+#ends
+
+#wrangling for line plot
+factors_data.iloc[:,2:] = factors_data.iloc[:,2:]/1_000_000
+#end
+
+#line_graph function
+selection = alt.selection_single()
+
+def line_graph(factor_name='high_blood_sugar', data=factors_data):
+    '''
+    plot the interactive line graph 
+    '''
+    line = alt.Chart(data).mark_line(point=True).add_selection(selection
+).encode(
+    alt.X("year:N", axis=alt.Axis(labelAngle=45)),
+    alt.Y("{}:Q".format(factor_name),title="Number of death (in million)"),
+    tooltip = ['year:N','continent:N', 
+               alt.Tooltip('{}:Q'.format(factor_name), format = ".2f",
+                          title="Number of death (in million)")],
+    color = alt.condition(selection, 'continent:N', alt.value('grey')),
+    opacity = alt.condition(selection, alt.value(0.9), alt.value(0.2))
+).properties(
+    title="Trend of {} over time , 1990 - 2017".format(factor_name.replace("_"," ")),
+    width=800,
+    height=350).configure_title(fontSize=25
+    ).configure_axis(
+    labelFontSize=15,
+    titleFontSize=20
+)
+    return line 
+jumbotron = dbc.Jumbotron(
+    [
+        dbc.Container(
+            [
+                html.H1("Worldwide Death Risk Factors", className="display-3"),
+                html.P('This app explores the various death causing risk factors globally, geographically in 2017 and the trends of the top five risk factors over years across continents.', style = {'textAlign':'left'}),
+                html.P('- The Overview tab gives an interactive visualization of the proportion in which the various death causing factors contribute to total death observed globally.', style = {'textAlign':'left'}),
+                html.P('- World Spread tab demonstrates the geographic distribution of risk factors using geo maps or choropleth.', style = {'textAlign':'left'}),
+                html.P('- Trends tab shows the trends of top five risk factors of deaths across all continents from 1990 up to 2017.', style = {'textAlign':'left'})
+            ],
+            fluid=True,
+        )
+    ],
+    fluid=True,
+)
+#layout starts
+app.layout = html.Div([jumbotron,
+    dcc.Tabs([
+        
+        dcc.Tab(label='2017 Overview', children=[
+            html.Iframe(
+            sandbox='allow-scripts',
+            id='plot',
+            height='600',
+            width='950',
+            style={'border-width': '0'},
+
+            ################ The magic happens here
+            srcDoc=open('../script/bar_chart.html').read()
+            ################ The magic happens here
+            ),
+
+            html.H3('Data source: "Institute for Health Metrics and Evaluation (IHME), 2018".'),
+        ]),
+        dcc.Tab(label='2017 World Spread', children=[
+           dcc.Dropdown(
+            id='dd-chart',
+            options=[
+                    {'label': 'High blood pressure', 'value': 'properties.high_blood_pressure'},
+                    {'label': 'smoking', 'value': 'properties.smoking'},
+                    {'label': 'High blood sugar', 'value': 'properties.high_blood_sugar'},
+                    {'label': 'Air pollution outdoor & indoor', 'value': 'properties.air_pollution_outdoor_&_indoor'},
+                    {'label': 'Obesity', 'value': 'properties.obesity'},
+                
+                ],
+                value='properties.high_blood_pressure', 
+                clearable=False,
+                style=dict(width='45%',
+                        verticalAlign="middle")
+            ),
+
+            html.Iframe(
+                sandbox='allow-scripts',
+                id='plot_map',
+                height='520',
+                width='1100',
+                style={'border-width': '0'},
+
+                ################ The magic happens here
+                srcDoc=draw_map().to_html()
+                ################ The magic happens here
+            ),
+        ]),
+        dcc.Tab(label='Trend', children=[
+
+            html.Iframe(
+                sandbox='allow-scripts',
+                id='line_plot',
+                height='500',
+                width='1000',
+                style={'border-width': '0'},
+
+                ################ The magic happens here
+                srcDoc=line_graph().to_html()
+                ################ The magic happens here
+                ),
+
+            dcc.RadioItems(
+            id='line-fcts',
+            options=[
+                    {'label': 'High blood pressure', 'value': 'high_blood_pressure'},
+                    {'label': 'smoking', 'value': 'smoking'},
+                    {'label': 'High blood sugar', 'value': 'high_blood_sugar'},
+                    {'label': 'Air pollution outdoor & indoor', 'value': 'air_pollution_outdoor_&_indoor'},
+                    {'label': 'Obesity', 'value': 'obesity'},
+                    
+                ],
+                
+                value = "high_blood_pressure",
+                labelStyle={'display': 'inline-block'}
+                ),
+
+        ])
+    ], colors={
+            "border": "white",
+            "primary": "gold",
+            "background": "cornsilk"
+        }),
+        html.Div(id='tabs-content-props')
+], style={'textAlign':'center'})
+
+
 @app.callback(
-    dash.dependencies.Output('plot', 'srcDoc'),
-    [dash.dependencies.Input('dd-chart', 'value'),
-     dash.dependencies.Input('dd-chart-y','value')])
-def update_plot(xaxis_column_name,
-                yaxis_column_name):
+    dash.dependencies.Output('plot_map', 'srcDoc'),
+    [dash.dependencies.Input('dd-chart', 'value')])
+
+def update_map(column_name):
     '''
     Takes in an xaxis_column_name and calls make_plot to update our Altair figure
     '''
-    updated_plot = make_plot(xaxis_column_name,
-                             yaxis_column_name).to_html()
-    return updated_plot
+    updated_map = draw_map(column_name).to_html()
+    return updated_map  
+
+@app.callback(
+    dash.dependencies.Output('line_plot', 'srcDoc'),
+    [dash.dependencies.Input('line-fcts', 'value')])
+
+def update_line_graph(factor_name):
+    '''
+    Takes in a factor_name and calls line_graph to update the Altair figure
+    '''
+    updated_line_graph = line_graph(factor_name).to_html()
+    return updated_line_graph
+
 if __name__ == '__main__':
     app.run_server(debug=True)
